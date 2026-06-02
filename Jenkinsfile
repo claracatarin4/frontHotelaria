@@ -12,14 +12,6 @@ pipeline {
             }
         }
 
-        stage('Prisma Generate') {
-
-            steps {
-
-                sh 'npx prisma generate'
-            }
-        }
-
         stage('Docker Build') {
 
             steps {
