@@ -8,8 +8,6 @@ RUN npm install
 
 COPY . .
 
-RUN npx prisma generate
-
 EXPOSE 9540
 
-CMD ["node", "src/server.js"]
+CMD ["npm", "run", "dev", "--", "--host"]
