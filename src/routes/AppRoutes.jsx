@@ -1,22 +1,29 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import Menu from '../pages/Menu/Menu';
+import Login from '../pages/Login/Login';
+import Cadastro from '../pages/Cadastro/Cadastro';
+import Home from '../pages/Home/Home';
 
-import Home from "../pages/Home/Home";
-
-import Quartos from "../features/quarto/pages/Quartos";
-import Reservas from "../features/reserva/pages/Reservas";
-import Usuarios from "../features/usuario/pages/Usuarios";
-import Pagamentos from "../features/pagamento/pages/Pagamentos";
+function PrivateRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return null;
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
+}
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
-
-        <Route path="/usuarios" element={<Usuarios />} />
-        <Route path="/quartos" element={<Quartos />} />
-        <Route path="/reservas" element={<Reservas />} />
-        <Route path="/pagamentos" element={<Pagamentos />} />
+        <Route path="/" element={<Menu />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/cadastro" element={<Cadastro />} />
+        <Route path="/home" element={
+          <PrivateRoute>
+            <Home />
+          </PrivateRoute>
+        } />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

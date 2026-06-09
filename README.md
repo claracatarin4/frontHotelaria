@@ -1,16 +1,78 @@
-# React + Vite
+# Hotel Luxe — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend React para o sistema de hotelaria, integrado com os microserviços de backend.
 
-Currently, two official plugins are available:
+## Fluxo de Telas
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```
+/ (Menu)  →  /login  →  /home (quartos)
+              ↓
+           /cadastro
+```
 
-## React Compiler
+## Microserviços integrados
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Serviço        | Porta | Variável de ambiente      |
+|----------------|-------|---------------------------|
+| cliente/usuário| 9531  | `VITE_USUARIO_API`        |
+| quarto         | 9533  | `VITE_QUARTO_API`         |
+| reserva        | 9532  | `VITE_RESERVA_API`        |
+| pagamento      | 9534  | `VITE_PAGAMENTO_API`      |
 
-## Expanding the ESLint configuration
+## Setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### 1. Copiar e configurar variáveis de ambiente
+
+```bash
+cp .env.example .env
+```
+
+Edite o `.env` com os endereços corretos dos seus backends (ex: se rodar no Docker, use o IP do container).
+
+### 2. Instalar dependências
+
+```bash
+npm install
+```
+
+### 3. Rodar o projeto
+
+```bash
+npm run dev
+```
+
+Acesse: http://localhost:5173
+
+## Endpoints utilizados
+
+### Usuário (porta 9531)
+- `POST /usuario/cadastrar` — criar usuário (login + senha)
+- `POST /usuario/login` — autenticar e obter JWT
+- `POST /` — criar perfil de cliente (nome, CPF, telefone, etc.)
+
+### Quarto (porta 9533)
+- `GET /quartos` — listar quartos (suporta filtros: `status`, `tipoQuartoId`, `skip`, `take`)
+- `GET /quartos/:id` — detalhe de um quarto
+
+## Estrutura de pastas
+
+```
+src/
+├── context/        # AuthContext (JWT + user state)
+├── pages/
+│   ├── Menu/       # Landing page (/)
+│   ├── Login/      # Tela de login (/login)
+│   ├── Cadastro/   # Cadastro em 2 etapas (/cadastro)
+│   └── Home/       # Listagem de quartos (/home)
+├── routes/         # AppRoutes.jsx (React Router)
+├── services/       # api.js (instâncias axios)
+└── index.css       # Design tokens globais
+```
+
+## Tecnologias
+
+- React 19 + Vite
+- React Router DOM v7
+- Axios
+- CSS Modules
+- Google Fonts (Cormorant Garamond + DM Sans)
