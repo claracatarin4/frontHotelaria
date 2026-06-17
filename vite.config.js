@@ -6,6 +6,11 @@ export default defineConfig({
   base: '/20261prj5/hotel/',
   server: {
     port: 9540,
-    host: true
-  }
+    strictPort: true,
+    host: true,
+    fs: {
+      strict: true,
+      deny: ['**/.*'],
+    },
+  },
 })
