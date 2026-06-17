@@ -136,7 +136,7 @@ function QuartoModal({ quarto, onClose }) {
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
 
   const [quartos, setQuartos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -152,7 +152,7 @@ export default function Home() {
     try {
       const params = {};
       if (filtroStatus) params.status = filtroStatus;
-      const { data } = await quartoApi.get('/quartos', { params });
+      const { data } = await quartoApi.get('/api/quartos', { params });
       setQuartos(data);
     } catch (err) {
       setError('Não foi possível carregar os quartos. Verifique se o servidor está ativo.');
@@ -205,8 +205,13 @@ export default function Home() {
             </button>
             {menuOpen && (
               <div className={styles.dropdown}>
-                <button className={styles.dropdownItem}>Meu perfil</button>
+                <button className={styles.dropdownItem} onClick={() => navigate('/configuracoes')}>Configurações</button>
                 <button className={styles.dropdownItem}>Minhas reservas</button>
+                {isAdmin && (
+                  <button className={styles.dropdownItem} onClick={() => navigate('/admin/quartos')}>
+                    Painel admin
+                  </button>
+                )}
                 <div className={styles.dropdownDivider} />
                 <button className={styles.dropdownItem} onClick={handleLogout} style={{ color: '#ff6b6b' }}>
                   Sair

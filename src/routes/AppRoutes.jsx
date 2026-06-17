@@ -4,11 +4,21 @@ import Menu from '../pages/Menu/Menu';
 import Login from '../pages/Login/Login';
 import Cadastro from '../pages/Cadastro/Cadastro';
 import Home from '../pages/Home/Home';
+import Configuracoes from '../pages/Configuracoes/Configuracoes';
+import Quartos from '../features/quarto/pages/Quartos';
+import RegisterQuarto from '../features/quarto/pages/RegisterQuarto';
 
 function PrivateRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
   if (loading) return null;
   return isAuthenticated ? children : <Navigate to="/login" replace />;
+}
+
+function AdminRoute({ children }) {
+  const { isAuthenticated, isAdmin, loading } = useAuth();
+  if (loading) return null;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return isAdmin ? children : <Navigate to="/home" replace />;
 }
 
 export default function AppRoutes() {
@@ -18,11 +28,13 @@ export default function AppRoutes() {
         <Route path="/" element={<Menu />} />
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Cadastro />} />
-        <Route path="/home" element={
-          <PrivateRoute>
-            <Home />
-          </PrivateRoute>
-        } />
+        {/* Cliente */}
+        <Route path="/home" element={<PrivateRoute><Home /></PrivateRoute>} />
+        <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
+        {/* Admin */}
+        <Route path="/admin/quartos" element={<AdminRoute><Quartos /></AdminRoute>} />
+        <Route path="/admin/quartos/novo" element={<AdminRoute><RegisterQuarto /></AdminRoute>} />
+        <Route path="/admin/quartos/:id/editar" element={<AdminRoute><RegisterQuarto /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

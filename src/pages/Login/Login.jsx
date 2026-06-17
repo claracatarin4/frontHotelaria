@@ -27,8 +27,12 @@ export default function Login() {
     setLoading(true);
     try {
       const { data } = await usuarioApi.post('/usuario/login', form);
-      login(data.token, { id: data.usuario_id, login: form.usuario_login });
-      navigate('/home');
+      login(data.token, {
+        id: data.usuario_id,
+        login: data.usuario_login || form.usuario_login,
+        role: data.usuario_role || 'Cliente',
+      });
+      navigate(data.usuario_role === 'Admin' ? '/admin/quartos' : '/home');
     } catch (err) {
       const msg = err.response?.data?.erro || 'Erro ao realizar login.';
       setError(msg);
