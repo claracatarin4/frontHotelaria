@@ -281,6 +281,7 @@ export default function ReservaModal({ quarto, onClose, onReservaCriada }) {
       // 4. Liga pagamento ao instrumento
       await criarTipoPagamento({
         pagamento_id: pagId,
+        reserva_id: rId,
         tipo_pagamento_status: 1,
         ...instrumentoId,
       });
