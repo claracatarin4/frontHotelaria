@@ -291,7 +291,7 @@ export default function ReservaModal({ quarto, onClose, onReservaCriada }) {
       if (onReservaCriada) onReservaCriada();
       setStep('confirmando');
     } catch (err) {
-      setErroGeral(err.response?.data?.mensagem || err.message || 'Erro ao processar. Tente novamente.');
+      setErroGeral(err.response?.data?.erro || err.response?.data?.mensagem || err.message || 'Erro ao processar. Tente novamente.');
     } finally {
       setProcessando(false);
     }
