@@ -22,6 +22,18 @@ const noites = (ci, co) => {
 
 // Um quarto está ocupado nas datas se houver reserva ativa (status 1 ou 2)
 // para o mesmo quarto cujo intervalo se sobrepõe a [ci, co).
+// Foto real do quarto (vinda do banco, ligada pelo quarto_id) ou placeholder de fallback
+function fotoDoQuarto(quarto) {
+  const f = quarto?.fotos?.find((x) => x?.foto_bin) || quarto?.fotos?.[0];
+  if (f?.foto_bin) {
+    return f.foto_bin.startsWith('data:')
+      ? f.foto_bin
+      : `data:image/${f.foto_extensao || 'jpeg'};base64,${f.foto_bin}`;
+  }
+  const ph = ['1631049307264', '1618773928121', '1582719478250', '1544161515-4ab6ce6db874'][(quarto?.id || 0) % 4];
+  return `https://images.unsplash.com/photo-${ph}?w=600&q=75`;
+}
+
 const quartoOcupado = (quartoId, ci, co, reservas) =>
   reservas.some((r) => {
     if (r.quarto_id !== quartoId) return false;
@@ -35,9 +47,7 @@ function QuartoCard({ quarto, qtdNoites, onClick }) {
   const tipoNome = quarto.tipoQuarto?.descricao || 'Quarto';
   const icon = Object.entries(TIPO_ICONS).find(([k]) => tipoNome.includes(k))?.[1] || '◈';
 
-  const placeholder = `https://images.unsplash.com/photo-${
-    ['1631049307264', '1618773928121', '1582719478250', '1544161515-4ab6ce6db874'][quarto.id % 4]
-  }?w=600&q=75`;
+  const placeholder = fotoDoQuarto(quarto);
 
   return (
     <div className={styles.card} onClick={() => onClick(quarto)}>
@@ -86,9 +96,7 @@ function QuartoModal({ quarto, datas, onClose, onReservar }) {
   const qtdNoites = datas ? noites(datas.checkin, datas.checkout) : 0;
   const subtotal = quarto.preco * (qtdNoites || 1);
   const taxas = subtotal * 0.1;
-  const placeholder = `https://images.unsplash.com/photo-${
-    ['1631049307264', '1618773928121', '1582719478250', '1544161515-4ab6ce6db874'][quarto.id % 4]
-  }?w=900&q=80`;
+  const placeholder = fotoDoQuarto(quarto);
 
   return (
     <div className={styles.modalBackdrop} onClick={onClose}>
