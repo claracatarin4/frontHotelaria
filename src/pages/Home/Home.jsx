@@ -30,8 +30,21 @@ function fotoDoQuarto(quarto) {
       ? f.foto_bin
       : `data:image/${f.foto_extensao || 'jpeg'};base64,${f.foto_bin}`;
   }
+  return placeholderQuarto(quarto);
+}
+
+// Placeholder de fallback (sem foto no banco ou base64 quebrada)
+function placeholderQuarto(quarto) {
   const ph = ['1631049307264', '1618773928121', '1582719478250', '1544161515-4ab6ce6db874'][(quarto?.id || 0) % 4];
   return `https://images.unsplash.com/photo-${ph}?w=600&q=75`;
+}
+
+// Se a imagem (base64) falhar ao carregar, troca pelo placeholder uma única vez
+function onImgError(quarto) {
+  return (e) => {
+    e.currentTarget.onerror = null;
+    e.currentTarget.src = placeholderQuarto(quarto);
+  };
 }
 
 const quartoOcupado = (quartoId, ci, co, reservas) =>
@@ -52,7 +65,7 @@ function QuartoCard({ quarto, qtdNoites, onClick }) {
   return (
     <div className={styles.card} onClick={() => onClick(quarto)}>
       <div className={styles.cardImg}>
-        <img src={placeholder} alt={tipoNome} className={styles.cardPhoto} loading="lazy" />
+        <img src={placeholder} alt={tipoNome} className={styles.cardPhoto} loading="lazy" onError={onImgError(quarto)} />
         <div className={styles.cardImgOverlay} />
         <div className={`${styles.statusBadge} ${styles.statusAvail}`}>
           Livre nas datas
@@ -103,7 +116,7 @@ function QuartoModal({ quarto, datas, onClose, onReservar }) {
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <button className={styles.modalClose} onClick={onClose}>✕</button>
         <div className={styles.modalImg}>
-          <img src={placeholder} alt={tipoNome} />
+          <img src={placeholder} alt={tipoNome} onError={onImgError(quarto)} />
         </div>
         <div className={styles.modalBody}>
           <div className={styles.modalHeader}>
