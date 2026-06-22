@@ -204,10 +204,22 @@ function StepConcluido({ reserva, quarto, datas, onFechar }) {
   );
 }
 
-export default function ReservaModal({ quarto, onClose, onReservaCriada }) {
+export default function ReservaModal({ quarto, datasIniciais, onClose, onReservaCriada }) {
   const { user } = useAuth();
-  const [step, setStep] = useState('datas');
-  const [datas, setDatas] = useState(null);
+
+  // Quando as datas já vêm escolhidas (fluxo data → quarto), pula a etapa de datas.
+  const calcDatas = (ci, co) => {
+    const q = noites(ci, co);
+    const subtotal = (quarto?.preco || 0) * q;
+    const taxas = subtotal * 0.1;
+    return { checkin: ci, checkout: co, qtdNoites: q, total: subtotal + taxas };
+  };
+  const temDatasIniciais = Boolean(
+    datasIniciais?.checkin && datasIniciais?.checkout && noites(datasIniciais.checkin, datasIniciais.checkout) >= 1
+  );
+
+  const [step, setStep] = useState(temDatasIniciais ? 'pagamento' : 'datas');
+  const [datas, setDatas] = useState(temDatasIniciais ? calcDatas(datasIniciais.checkin, datasIniciais.checkout) : null);
   const [reservaId, setReservaId] = useState(null);
   const [reservaFinal, setReservaFinal] = useState(null);
   const [processando, setProcessando] = useState(false);

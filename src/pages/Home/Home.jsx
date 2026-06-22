@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { quartoApi } from '../../services/api';
+import { listarReservas } from '../../services/reservaService';
 import ReservaModal from './ReservaModal';
 import styles from './Home.module.css';
 
-const STATUS_MAP = { 1: 'Disponível', 2: 'Ocupado', 3: 'Manutenção' };
 const TIPO_ICONS = {
   'Luxo': '♛',
   'Standard': '◈',
@@ -13,9 +13,25 @@ const TIPO_ICONS = {
   'Executive': '✦',
 };
 
-function QuartoCard({ quarto, onClick }) {
-  const statusLabel = STATUS_MAP[quarto.status] || 'Disponível';
-  const isAvailable = quarto.status === 1;
+const hoje = () => new Date().toISOString().split('T')[0];
+const dateOnly = (s) => (s || '').split('T')[0];
+const noites = (ci, co) => {
+  if (!ci || !co) return 0;
+  return Math.max(0, Math.round((new Date(co) - new Date(ci)) / 86400000));
+};
+
+// Um quarto está ocupado nas datas se houver reserva ativa (status 1 ou 2)
+// para o mesmo quarto cujo intervalo se sobrepõe a [ci, co).
+const quartoOcupado = (quartoId, ci, co, reservas) =>
+  reservas.some((r) => {
+    if (r.quarto_id !== quartoId) return false;
+    if (![1, 2].includes(r.reserva_status)) return false;
+    const rin = dateOnly(r.reserva_checkin);
+    const rout = dateOnly(r.reserva_checkout);
+    return ci < rout && rin < co; // sobreposição de intervalos
+  });
+
+function QuartoCard({ quarto, qtdNoites, onClick }) {
   const tipoNome = quarto.tipoQuarto?.descricao || 'Quarto';
   const icon = Object.entries(TIPO_ICONS).find(([k]) => tipoNome.includes(k))?.[1] || '◈';
 
@@ -24,12 +40,12 @@ function QuartoCard({ quarto, onClick }) {
   }?w=600&q=75`;
 
   return (
-    <div className={`${styles.card} ${!isAvailable ? styles.cardUnavailable : ''}`} onClick={() => isAvailable && onClick(quarto)}>
+    <div className={styles.card} onClick={() => onClick(quarto)}>
       <div className={styles.cardImg}>
         <img src={placeholder} alt={tipoNome} className={styles.cardPhoto} loading="lazy" />
         <div className={styles.cardImgOverlay} />
-        <div className={`${styles.statusBadge} ${isAvailable ? styles.statusAvail : styles.statusBusy}`}>
-          {statusLabel}
+        <div className={`${styles.statusBadge} ${styles.statusAvail}`}>
+          Livre nas datas
         </div>
         {quarto.numero && (
           <div className={styles.numeroBadge}>Nº {quarto.numero}</div>
@@ -50,21 +66,26 @@ function QuartoCard({ quarto, onClick }) {
           </div>
         </div>
 
-        {isAvailable ? (
-          <button className={styles.btnReservar}>
-            Ver Oferta →
-          </button>
-        ) : (
-          <div className={styles.indisponivel}>Quarto indisponível</div>
+        {qtdNoites > 0 && (
+          <p className={styles.cardTotal}>
+            {qtdNoites} noite{qtdNoites > 1 ? 's' : ''} · R$ {(quarto.preco * qtdNoites).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
         )}
+
+        <button className={styles.btnReservar}>
+          Reservar →
+        </button>
       </div>
     </div>
   );
 }
 
-function QuartoModal({ quarto, onClose, onReservar }) {
+function QuartoModal({ quarto, datas, onClose, onReservar }) {
   if (!quarto) return null;
   const tipoNome = quarto.tipoQuarto?.descricao || 'Quarto';
+  const qtdNoites = datas ? noites(datas.checkin, datas.checkout) : 0;
+  const subtotal = quarto.preco * (qtdNoites || 1);
+  const taxas = subtotal * 0.1;
   const placeholder = `https://images.unsplash.com/photo-${
     ['1631049307264', '1618773928121', '1582719478250', '1544161515-4ab6ce6db874'][quarto.id % 4]
   }?w=900&q=80`;
@@ -112,17 +133,25 @@ function QuartoModal({ quarto, onClose, onReservar }) {
 
           <div className={styles.modalResumo}>
             <p className={styles.resumoTitle}>Resumo da compra</p>
+            {datas && (
+              <div className={styles.resumoRow}>
+                <span>Período</span>
+                <span>
+                  {new Date(datas.checkin).toLocaleDateString('pt-BR')} → {new Date(datas.checkout).toLocaleDateString('pt-BR')}
+                </span>
+              </div>
+            )}
             <div className={styles.resumoRow}>
-              <span>1 quarto × 2 diárias</span>
-              <span>R$ {(quarto.preco * 2)?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              <span>R$ {quarto.preco?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} × {qtdNoites || 1} {qtdNoites === 1 ? 'diária' : 'diárias'}</span>
+              <span>R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className={styles.resumoRow}>
-              <span>Taxas e impostos</span>
-              <span>R$ {(quarto.preco * 0.25)?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              <span>Taxas e impostos (10%)</span>
+              <span>R$ {taxas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className={`${styles.resumoRow} ${styles.resumoTotal}`}>
               <span>Total</span>
-              <span>R$ {(quarto.preco * 2.25)?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              <span>R$ {(subtotal + taxas).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
 
@@ -140,22 +169,26 @@ export default function Home() {
   const { user, logout, isAdmin } = useAuth();
 
   const [quartos, setQuartos] = useState([]);
+  const [reservas, setReservas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
+  const [checkin, setCheckin] = useState('');
+  const [checkout, setCheckout] = useState('');
   const [selectedQuarto, setSelectedQuarto] = useState(null);
   const [reservarQuarto, setReservarQuarto] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const fetchQuartos = async () => {
+  const fetchDados = async () => {
     setLoading(true);
     setError('');
     try {
-      const params = {};
-      if (filtroStatus) params.status = filtroStatus;
-      const { data } = await quartoApi.get('/api/quartos', { params });
-      setQuartos(data);
+      const [quartosRes, reservasRes] = await Promise.all([
+        quartoApi.get('/api/quartos'),
+        listarReservas().catch(() => []), // se reservas falhar, segue só com status do quarto
+      ]);
+      setQuartos(Array.isArray(quartosRes.data) ? quartosRes.data : []);
+      setReservas(Array.isArray(reservasRes) ? reservasRes : []);
     } catch (err) {
       setError('Não foi possível carregar os quartos. Verifique se o servidor está ativo.');
     } finally {
@@ -164,14 +197,21 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchQuartos();
-  }, [filtroStatus]);
+    fetchDados();
+  }, []);
+
+  const datasValidas = Boolean(checkin && checkout && checkout > checkin);
+  const qtdNoites = noites(checkin, checkout);
+
+  const quartosDisponiveis = datasValidas
+    ? quartos.filter((q) => q.status === 1 && !quartoOcupado(q.id, checkin, checkout, reservas))
+    : [];
 
   const quartosFiltrados = filtroTipo
-    ? quartos.filter(q => q.tipoQuarto?.descricao?.toLowerCase().includes(filtroTipo.toLowerCase()))
-    : quartos;
+    ? quartosDisponiveis.filter((q) => q.tipoQuarto?.descricao?.toLowerCase().includes(filtroTipo.toLowerCase()))
+    : quartosDisponiveis;
 
-  const tiposUnicos = [...new Set(quartos.map(q => q.tipoQuarto?.descricao).filter(Boolean))];
+  const tiposUnicos = [...new Set(quartosDisponiveis.map((q) => q.tipoQuarto?.descricao).filter(Boolean))];
 
   const handleLogout = () => {
     logout();
@@ -228,38 +268,61 @@ export default function Home() {
       <div className={styles.heroStrip}>
         <div className={styles.heroStripContent}>
           <h1 className={styles.heroTitle}>
-            Nossos <em>Quartos</em>
+            Encontre seu <em>Quarto</em>
           </h1>
           <p className={styles.heroSub}>
-            {quartos.length > 0 ? `${quartos.filter(q => q.status === 1).length} quartos disponíveis agora` : 'Carregando disponibilidade...'}
+            Escolha as datas da sua estadia para ver os quartos disponíveis.
           </p>
         </div>
         <div className={styles.heroOrb} />
       </div>
 
-      {/* Filtros */}
-      <div className={styles.filterBar}>
-        <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>Disponibilidade</span>
-          <div className={styles.filterChips}>
-            {[
-              { v: '', l: 'Todos' },
-              { v: '1', l: 'Disponível' },
-              { v: '2', l: 'Ocupado' },
-              { v: '3', l: 'Manutenção' },
-            ].map(({ v, l }) => (
-              <button
-                key={v}
-                className={`${styles.chip} ${filtroStatus === v ? styles.chipActive : ''}`}
-                onClick={() => setFiltroStatus(v)}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
+      {/* Barra de busca por datas */}
+      <div className={styles.searchBar}>
+        <div className={styles.searchField}>
+          <label className={styles.searchLabel}>Check-in</label>
+          <input
+            type="date"
+            className={styles.searchInput}
+            min={hoje()}
+            value={checkin}
+            onChange={(e) => {
+              setCheckin(e.target.value);
+              if (checkout && e.target.value && checkout <= e.target.value) setCheckout('');
+            }}
+          />
         </div>
+        <div className={styles.searchField}>
+          <label className={styles.searchLabel}>Check-out</label>
+          <input
+            type="date"
+            className={styles.searchInput}
+            min={checkin || hoje()}
+            value={checkout}
+            onChange={(e) => setCheckout(e.target.value)}
+            disabled={!checkin}
+          />
+        </div>
+        {datasValidas && (
+          <div className={styles.searchInfo}>
+            <span className={styles.searchNoites}>{qtdNoites} noite{qtdNoites > 1 ? 's' : ''}</span>
+            <span className={styles.searchCount}>
+              {quartosDisponiveis.length} quarto{quartosDisponiveis.length !== 1 ? 's' : ''} disponíve{quartosDisponiveis.length !== 1 ? 'is' : 'l'}
+            </span>
+          </div>
+        )}
+        <button className={styles.refreshBtn} onClick={fetchDados} title="Atualizar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+          </svg>
+        </button>
+      </div>
 
-        {tiposUnicos.length > 0 && (
+      {/* Filtro por tipo (só quando há datas e quartos) */}
+      {datasValidas && tiposUnicos.length > 0 && (
+        <div className={styles.filterBar}>
           <div className={styles.filterGroup}>
             <span className={styles.filterLabel}>Tipo</span>
             <div className={styles.filterChips}>
@@ -277,16 +340,8 @@ export default function Home() {
               ))}
             </div>
           </div>
-        )}
-
-        <button className={styles.refreshBtn} onClick={fetchQuartos} title="Atualizar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-            <polyline points="23 4 23 10 17 10" />
-            <polyline points="1 20 1 14 7 14" />
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-          </svg>
-        </button>
-      </div>
+        </div>
+      )}
 
       {/* Content */}
       <main className={styles.main}>
@@ -303,22 +358,34 @@ export default function Home() {
             <span className={styles.errorIcon}>⚠</span>
             <p className={styles.errorTitle}>Erro ao carregar quartos</p>
             <p className={styles.errorMsg}>{error}</p>
-            <button className={styles.btnRetry} onClick={fetchQuartos}>Tentar novamente</button>
+            <button className={styles.btnRetry} onClick={fetchDados}>Tentar novamente</button>
           </div>
         )}
 
-        {!loading && !error && quartosFiltrados.length === 0 && (
+        {/* Sem datas selecionadas → orienta o usuário */}
+        {!loading && !error && !datasValidas && (
+          <div className={styles.emptyState}>
+            <span className={styles.emptyIcon}>📅</span>
+            <p className={styles.emptyTitle}>Selecione as datas da sua estadia</p>
+            <p className={styles.emptyMsg}>
+              Informe o check-in e o check-out acima para ver os quartos disponíveis no período.
+            </p>
+          </div>
+        )}
+
+        {/* Datas válidas mas nenhum quarto livre */}
+        {!loading && !error && datasValidas && quartosFiltrados.length === 0 && (
           <div className={styles.emptyState}>
             <span className={styles.emptyIcon}>◈</span>
-            <p className={styles.emptyTitle}>Nenhum quarto encontrado</p>
-            <p className={styles.emptyMsg}>Tente ajustar os filtros ou volte mais tarde.</p>
+            <p className={styles.emptyTitle}>Nenhum quarto disponível nessas datas</p>
+            <p className={styles.emptyMsg}>Tente outro período ou ajuste o filtro de tipo.</p>
           </div>
         )}
 
-        {!loading && !error && quartosFiltrados.length > 0 && (
+        {!loading && !error && datasValidas && quartosFiltrados.length > 0 && (
           <div className={styles.grid}>
             {quartosFiltrados.map((quarto) => (
-              <QuartoCard key={quarto.id} quarto={quarto} onClick={setSelectedQuarto} />
+              <QuartoCard key={quarto.id} quarto={quarto} qtdNoites={qtdNoites} onClick={setSelectedQuarto} />
             ))}
           </div>
         )}
@@ -328,17 +395,19 @@ export default function Home() {
       {selectedQuarto && (
         <QuartoModal
           quarto={selectedQuarto}
+          datas={{ checkin, checkout }}
           onClose={() => setSelectedQuarto(null)}
           onReservar={(q) => { setSelectedQuarto(null); setReservarQuarto(q); }}
         />
       )}
 
-      {/* Fluxo de reserva */}
+      {/* Fluxo de reserva — datas já escolhidas, abre direto no pagamento */}
       {reservarQuarto && (
         <ReservaModal
           quarto={reservarQuarto}
+          datasIniciais={{ checkin, checkout }}
           onClose={() => setReservarQuarto(null)}
-          onReservaCriada={fetchQuartos}
+          onReservaCriada={fetchDados}
         />
       )}
 

@@ -692,6 +692,76 @@
   .heroStrip { padding: 32px 24px; }
   .heroTitle { font-size: 36px; }
   .filterBar { padding: 16px 24px; gap: 16px; }
+  .searchBar { padding: 16px 24px; gap: 16px; }
   .main { padding: 28px 24px; }
   .footer { padding: 24px; flex-direction: column; gap: 8px; text-align: center; }
+}
+
+/* SEARCH BAR (busca por datas) */
+.searchBar {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  padding: 20px 48px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.searchField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.searchLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.searchInput {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
+  color-scheme: dark;
+  transition: border-color 0.2s;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--pink);
+}
+
+.searchInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.searchInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 4px;
+}
+
+.searchNoites {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.searchCount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pink);
+}
+
+.cardTotal {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 8px 0 0;
 }
