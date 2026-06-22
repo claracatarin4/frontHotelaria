@@ -9,8 +9,9 @@
 > (escolher datas → ver quartos livres), adicionou validação de overbooking no MS Reserva,
 > transformou o pagamento em assíncrono (gateway simulado via RabbitMQ), criou o dashboard
 > admin de reservas, **repovoou o banco com 48 quartos + fotos** (scripts de seed/reset),
-> adicionou **máscara/validação de CPF e telefone** (front + MS Cliente) e parou de armazenar
-> o cartão real no MS Pagamento (**máscara + hash, CVV descartado**).
+> adicionou **máscara/validação de CPF e telefone** (front + MS Cliente), parou de armazenar
+> o cartão real no MS Pagamento (**máscara + hash, CVV descartado**) e implementou
+> **autenticação JWT + autorização por role nos 4 microsserviços** (controle de acesso real).
 > Detalhes na seção **"Sessão 2026-06-22"** ao final. O 502 no login do MS Cliente segue
 > pendente (ver seção "Sessão 2026-06-18").
 
@@ -194,7 +195,7 @@ src/
 - [ ] Links da navbar: Quartos, Reservas, Serviços, Contato (atualmente sem função)
 - [ ] Persistir preferências da página Configurações (hoje só visuais)
 - [ ] Editar dados de perfil de verdade (precisa endpoint no MS Cliente ligando `usuario`↔`cliente`)
-- [ ] **Proteção de `role` no backend** (hoje a barreira admin é só no front) — opcional, se exigido
+- [x] ~~Proteção de `role` no backend~~ — FEITO em 2026-06-22 (auth JWT + role nos 4 MS; ver seção "Autenticação")
 - [ ] Upload/exibição de fotos na Home (infra pronta no admin, falta usar na listagem pública)
 - [ ] Overbooking: a checagem de sobreposição é `findFirst` (sem transação) — corrida de concorrência
       ainda permite, em teoria, duas reservas simultâneas no mesmo quarto/data (ver "Sessão 2026-06-22")
@@ -466,3 +467,40 @@ Banco de produção limpo e repovoado via scripts (rodados contra o gateway `aca
 - Não afeta a aprovação/recusa: ela usa os dados de `/pagamentos/processar`, não a tabela `cartao`.
 - ⚠ Vale para cartões NOVOS após redeploy. Os 2 registros antigos com PAN em texto puro continuam
   no banco — falta um UPDATE para mascará-los (pendente, se quiserem).
+
+## Autenticação e Autorização (implementado 2026-06-22, testar no Jenkins amanhã)
+Resolve o que o professor apontou (não é "mascarar URL", é controle de acesso no backend).
+**Pré-requisito atendido:** `JWT_SECRET="segredo"` agora é IGUAL nos 4 MS (o do Pagamento foi
+alterado de `hotel_pagamento_secret` para `segredo`) → um token de login vale em todos.
+
+### MS Cliente (`PI_hotel_cliente`, push ✅ — commit 67c41b7)
+- Novo `src/middlewares/auth.js` (`auth` valida Bearer + injeta `req.user{id,login,role}`; `requireAdmin`).
+- `GET /:id` e `PUT/PATCH /:id`: só dono (`usuario_id === req.user.id`) ou Admin → **corrige o IDOR `/cliente/1`**.
+- `GET /`: Admin vê todos; cliente comum só o próprio (filtra por `usuario_id`).
+- `PATCH /:id/excluir`: só Admin. `POST /` (cadastro) e login/cadastrar continuam PÚBLICOS.
+
+### MS Reserva (`PI_Hotel_Reserva`, push ✅ — commit 54f8ef0)
+- Aplica o `middlewares/auth.js` (que já existia) em todas as rotas. Adiciona `jsonwebtoken` ao package.json.
+
+### MS Pagamento (`api_hotel_pagamento`, push ✅ — commit d0f5e90)
+- Religa o `middlewares/auth.js` (estava com `return next()`). Todas as rotas já usavam `auth`.
+
+### MS Quarto (`pi_hotel_quarto`, push ❌ 403 — commit LOCAL 76c0ab4)
+- Novo `middlewares/auth.js`. GET (catálogo) público; POST/PUT/PATCH/DELETE de quartos/tipos/fotos = só Admin.
+- Reordena `/api/quartos/reservas` antes de `/:id`. Scripts seed/reset aceitam `TOKEN=...`.
+- ⚠ NÃO foi pushado (sem acesso de escrita). Precisa a `claracatarin4` aplicar/dar acesso.
+
+### Front (`frontHotelaria`, push ✅ — commit d4f853c)
+- `api.js`: response interceptor — 401 (sessão inválida) limpa e redireciona pro `/login`
+  (exceto endpoints de login/cadastro); 403 é repassado ao componente. Request interceptor já existia.
+- `pagamentoService.js`: removido o token fixo; usa o token do usuário logado (via interceptor).
+
+### ⚠ CHECKLIST PRA TESTAR NO JENKINS (importante)
+1. **A conta Admin precisa ter `usuario_role = 'Admin'` no banco** — senão `requireAdmin` bloqueia (403)
+   o painel de quartos. Conferir/ajustar na tabela `usuario` do MS Cliente.
+2. **Redeploy + `iisreset`** em cada serviço alterado (o secret novo do Pagamento só vale após reiniciar).
+3. **MS Quarto** não está deployado com auth (push 403) — até aplicar, escrita de quarto segue aberta.
+4. Rodar `seed`/`reset` de quarto após o auth exige `TOKEN=<jwt admin>` (senão 401/403).
+5. Os `.env` de Reserva/Quarto/Pagamento em Downloads tinham a senha do banco com `@` não-escapado
+   (`senac@12938`); o do Cliente estava certo (`senac%4012938`). Como os serviços funcionam, o env real
+   (Infisical) deve estar correto — mas conferir se algum der erro de conexão.
