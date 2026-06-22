@@ -71,6 +71,7 @@ export default function Quartos() {
         <div className={styles.navLinks}>
           <button className={`${styles.navLink} ${styles.navLinkActive}`} onClick={() => navigate('/admin/quartos')}>Quartos</button>
           <button className={styles.navLink} onClick={() => navigate('/admin/tipos-quarto')}>Tipos de quarto</button>
+          <button className={styles.navLink} onClick={() => navigate('/admin/reservas')}>Reservas</button>
         </div>
         <div className={styles.navRight}>
           <span className={styles.userName}>{user?.login || 'Admin'}</span>

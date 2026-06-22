@@ -8,6 +8,7 @@ import Configuracoes from '../pages/Configuracoes/Configuracoes';
 import Quartos from '../features/quarto/pages/Quartos';
 import RegisterQuarto from '../features/quarto/pages/RegisterQuarto';
 import TiposQuarto from '../features/quarto/pages/TiposQuarto';
+import ReservasAdmin from '../features/reserva/pages/ReservasAdmin';
 import MinhasReservas from '../pages/MinhasReservas/MinhasReservas';
 
 function PrivateRoute({ children }) {
@@ -39,6 +40,7 @@ export default function AppRoutes() {
         <Route path="/admin/quartos/novo" element={<AdminRoute><RegisterQuarto /></AdminRoute>} />
         <Route path="/admin/quartos/:id/editar" element={<AdminRoute><RegisterQuarto /></AdminRoute>} />
         <Route path="/admin/tipos-quarto" element={<AdminRoute><TiposQuarto /></AdminRoute>} />
+        <Route path="/admin/reservas" element={<AdminRoute><ReservasAdmin /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
