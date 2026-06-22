@@ -8,7 +8,9 @@
 > **Última atualização:** 2026-06-22. Sessão recente inverteu o fluxo de reserva
 > (escolher datas → ver quartos livres), adicionou validação de overbooking no MS Reserva,
 > transformou o pagamento em assíncrono (gateway simulado via RabbitMQ), criou o dashboard
-> admin de reservas e **repovoou o banco com 48 quartos + fotos** (scripts de seed/reset).
+> admin de reservas, **repovoou o banco com 48 quartos + fotos** (scripts de seed/reset),
+> adicionou **máscara/validação de CPF e telefone** (front + MS Cliente) e parou de armazenar
+> o cartão real no MS Pagamento (**máscara + hash, CVV descartado**).
 > Detalhes na seção **"Sessão 2026-06-22"** ao final. O 502 no login do MS Cliente segue
 > pendente (ver seção "Sessão 2026-06-18").
 
@@ -222,6 +224,7 @@ src/
 - `POST /usuario/login` — `{ usuario_login, usuario_senha }` → 200 `{ mensagem, token, usuario_id, usuario_login, usuario_role }`
 - `GET /` · `GET /:id` · `POST /` · `PUT|PATCH /:id` · `PATCH /:id/excluir` (soft delete) · `GET /cliente/reservas`
 - Models: `Usuario{ usuario_id, usuario_login(unique), usuario_senha, usuario_status[Ativo|Inativo], usuario_role[Cliente|Admin] }`, `Cliente{ cliente_id, cliente_nome, cliente_idade, cliente_genero, cliente_cpf(unique), cliente_telefone, cliente_status, usuario_id(FK), quarto_id? }`
+- `criar`/`atualizar` padronizam `cliente_cpf` (000.000.000-00) e `cliente_telefone` ((00) 00000-0000) a partir dos dígitos antes de salvar (ver "Sessão 2026-06-22").
 
 ### MS Quarto (Restify, 9533) — gateway `/quarto` ⚠ prefixo `/api`
 - `GET /api/quartos` (inclui `tipoQuarto` e `fotos`) · `GET /api/quartos/preco?minPreco=&maxPreco=` · `GET /api/quartos/:id`
@@ -245,6 +248,9 @@ src/
 - `POST /auth/login` (auth próprio) · `GET|POST /pagamentos`, `GET|PUT|PATCH|DELETE /pagamentos/:id`
 - `POST /pagamentos` — `{ pagamento_tipo, pagamento_status, pagamento_data, pagamento_endereco }`
 - `POST /cartoes` — `{ cartao_numero, cartao_validade, cartao_cvv, cartao_banco, cartao_nome, cartao_status }`
+  ⚠ desde 2026-06-22 o cartão NÃO é guardado em texto puro: `cartao_numero` salva mascarado +
+  hash (`**** **** **** 4444 #<hash>`) e `cartao_cvv` vira `***`. A validação aprova/recusa usa os
+  dados enviados em `/pagamentos/processar`, não o cartão salvo.
 - `POST /boletos` — `{ boleto_numero, boleto_vencimento, boleto_emissao, boleto_status }`
 - `POST /depositos` — `{ deposito_banco, deposito_valor, deposito_agencia, deposito_conta, deposito_status }`
 - `POST /tipo-pagamento` — `{ pagamento_id, reserva_id, tipo_pagamento_status, cartao_id? | boleto_id? | deposito_id? }`
@@ -437,3 +443,26 @@ Banco de produção limpo e repovoado via scripts (rodados contra o gateway `aca
   só cai no placeholder Unsplash se o quarto não tiver foto. Aplicado no card e no modal.
 - A foto vem no `GET /api/quartos` (getAll do MS Quarto inclui `fotos`). Atenção: 48 quartos com base64
   deixam essa resposta pesada (~poucos MB) — aceitável para o escopo, mas é o motivo de manter as imagens pequenas (w=600).
+
+## Tratamento de dados — CPF/telefone e cartão (2026-06-22)
+
+### CPF e telefone (cliente)
+- **Front** `src/utils/validators.js`: `maskCPF`, `maskTelefone`, `validarCPF` (com dígitos
+  verificadores), `validarTelefone`, `apenasDigitos`.
+- `Cadastro.jsx`: máscara enquanto digita (CPF `000.000.000-00`, telefone `(00) 00000-0000`),
+  valida CPF/telefone/idade (18–120) antes de enviar; manda o valor já padronizado.
+- `ReservasAdmin.jsx`: formata CPF/telefone só na exibição (padroniza visualmente dados antigos).
+- **Backend MS Cliente** `cliente.controller.js`: `formatarCPF`/`formatarTelefone` normalizam o
+  formato no `criar` e `atualizar` (best-effort, não rejeita) — garante padrão mesmo via API direta.
+- ⚠ A validação de CPF agora exige dígitos verificadores válidos: CPFs de teste antigos como
+  `123.456.789-00` NÃO passam mais no cadastro novo (mas seguem sendo exibidos formatados).
+
+### Cartão (segurança — MS Pagamento)
+- Problema: `cartaoController` guardava `cartao_numero` e `cartao_cvv` em texto puro (o
+  `sanitizeCartao` só escondia o CVV na resposta, não no banco).
+- Correção (sem mudar schema): em `create/update/patch`,
+  `cartao_numero` = `**** **** **** <4últimos> #<hash sha256 12 hex>` (cabe no VARCHAR45);
+  `cartao_cvv` = `***` (nunca armazenado). Helper `mascararNumero` + `CVV_MASCARADO`.
+- Não afeta a aprovação/recusa: ela usa os dados de `/pagamentos/processar`, não a tabela `cartao`.
+- ⚠ Vale para cartões NOVOS após redeploy. Os 2 registros antigos com PAN em texto puro continuam
+  no banco — falta um UPDATE para mascará-los (pendente, se quiserem).
