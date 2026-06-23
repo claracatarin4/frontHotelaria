@@ -173,6 +173,7 @@ src/
     a tela "confirmando" só como simulação (cartão 2,5s · boleto 10s · depósito 6s). Erro só se
     faltar informação ou falha de rede. Ver "Sessão 2026-06-23".
 - Páginas **Contato** (`/contato`) e **Serviços** (`/servicos`)
+  - O formulário de Contato envia por e-mail via **Web3Forms** (sem backend/banco) — ver "Sessão 2026-06-23"
 - Navbar com dropdown de usuário (avatar, nome, logout, Minhas Reservas, Painel Admin se admin)
 - Rota privada (PrivateRoute) protegendo `/home`, `/reservas`, `/configuracoes`
 - Deploy funcionando no Jenkins/Docker/IIS
@@ -646,3 +647,13 @@ tela de Reservas calculava.
   Em manutenção (3), o quarto **some da Home** (que filtra `status === 1`) e aparece como "Manutenção".
 - ⚠ Pôr em manutenção muda só o status manual; **não cancela reservas futuras** já existentes do quarto
   (regra extra, se quiserem no futuro). Front-only.
+
+## Formulário de Contato → e-mail via Web3Forms (`Contato.jsx`, commit `74de536`)
+A tela de Contato envia a mensagem por e-mail **sem backend e sem banco** (não criar coluna de mensagens).
+- `POST https://api.web3forms.com/submit` com `access_key` + `{ name, email, message, conta_logada }`.
+  A `access_key` (em `WEB3FORMS_ACCESS_KEY` no topo do arquivo) roteia pro e-mail cadastrado no Web3Forms.
+- O e-mail do remetente vira *reply-to*; o e-mail destino **não aparece no código** (só a key).
+- Inclui `conta_logada` (login do usuário) pra saber de quem veio, sem persistir nada.
+- ⚠ A access key fica visível no bundle do front (normal no client-side; não dá acesso a nada).
+  1ª mensagem pode cair no spam. Front-only.
+- Alternativa avaliada: FormSubmit.co (zero cadastro, mas expõe o e-mail no código).
