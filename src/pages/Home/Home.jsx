@@ -249,8 +249,8 @@ export default function Home() {
         </div>
 
         <div className={styles.navCenter}>
-          <button className={styles.navLink}>Quartos</button>
-          <button className={styles.navLink}>Reservas</button>
+          <button className={styles.navLink} onClick={() => document.getElementById('quartos')?.scrollIntoView({ behavior: 'smooth' })}>Quartos</button>
+          <button className={styles.navLink} onClick={() => navigate('/reservas')}>Reservas</button>
           <button className={styles.navLink} onClick={() => navigate('/servicos')}>Serviços</button>
           <button className={styles.navLink} onClick={() => navigate('/contato')}>Contato</button>
         </div>
@@ -404,7 +404,7 @@ export default function Home() {
         )}
 
         {!loading && !error && datasValidas && quartosFiltrados.length > 0 && (
-          <div className={styles.grid}>
+          <div id="quartos" className={styles.grid}>
             {quartosFiltrados.map((quarto) => (
               <QuartoCard key={quarto.id} quarto={quarto} qtdNoites={qtdNoites} onClick={setSelectedQuarto} />
             ))}
