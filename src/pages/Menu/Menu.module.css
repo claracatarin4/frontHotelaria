@@ -47,6 +47,8 @@
 .logoIcon {
   color: var(--pink);
   font-size: 18px;
+  animation: float 4s ease-in-out infinite;
+  display: inline-block;
 }
 
 .logoText {
@@ -104,7 +106,6 @@
   align-items: center;
   position: relative;
   z-index: 5;
-  animation: fadeIn 0.7s ease forwards;
 }
 
 .eyebrow {
@@ -114,6 +115,8 @@
   color: var(--pink);
   margin-bottom: 20px;
   font-weight: 500;
+  animation: fadeIn 0.5s ease both;
+  animation-delay: 0.1s;
 }
 
 .title {
@@ -123,6 +126,8 @@
   line-height: 1.1;
   color: var(--text-primary);
   margin-bottom: 24px;
+  animation: fadeIn 0.6s ease both;
+  animation-delay: 0.25s;
 }
 
 .title em {
@@ -136,12 +141,16 @@
   color: var(--text-secondary);
   max-width: 420px;
   margin-bottom: 40px;
+  animation: fadeIn 0.5s ease both;
+  animation-delay: 0.4s;
 }
 
 .cta {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+  animation: fadeIn 0.5s ease both;
+  animation-delay: 0.55s;
 }
 
 .btnHero {
@@ -314,9 +323,13 @@
   padding: 40px 32px;
   border-right: 1px solid var(--border);
   transition: background 0.2s;
-  animation: fadeIn 0.6s ease forwards;
-  opacity: 0;
+  animation: fadeIn 0.6s ease both;
 }
+
+.featureCard:nth-child(1) { animation-delay: 0.1s; }
+.featureCard:nth-child(2) { animation-delay: 0.22s; }
+.featureCard:nth-child(3) { animation-delay: 0.34s; }
+.featureCard:nth-child(4) { animation-delay: 0.46s; }
 
 .featureCard:last-child {
   border-right: none;
