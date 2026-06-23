@@ -172,20 +172,55 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 32px 28px;
-  transition: border-color 0.25s, transform 0.25s;
+  overflow: hidden;
+  transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
   animation: fadeIn 0.5s ease both;
 }
 .card:hover {
   border-color: var(--pink-border);
   transform: translateY(-3px);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+}
+
+.cardImg {
+  position: relative;
+  height: 170px;
+  overflow: hidden;
+}
+.cardImg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.5s ease;
+}
+.card:hover .cardImg img { transform: scale(1.06); }
+.cardImg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 45%, rgba(17,17,17,0.85));
 }
 
 .cardIcon {
-  display: block;
-  font-size: 22px;
+  position: absolute;
+  left: 16px;
+  bottom: 12px;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
   color: var(--pink);
-  margin-bottom: 18px;
+  background: rgba(17,17,17,0.7);
+  border: 1px solid var(--border-pink);
+  border-radius: 50%;
+  backdrop-filter: blur(4px);
+}
+.cardBody {
+  padding: 22px 24px 26px;
 }
 .cardTitle {
   font-family: 'Cormorant Garamond', serif;
