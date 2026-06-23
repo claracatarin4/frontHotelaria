@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { criarReserva, buscarReserva } from '../../services/reservaService';
-import { criarPagamento, criarCartao, criarBoleto, criarDeposito, criarTipoPagamento, processarPagamento } from '../../services/pagamentoService';
+import { criarReserva } from '../../services/reservaService';
+import { criarPagamento, criarCartao, criarBoleto, criarDeposito, criarTipoPagamento } from '../../services/pagamentoService';
 import styles from './ReservaModal.module.css';
+
+// Tempo de "processamento" simulado por método (ms)
+const SIMULACAO_MS = { cartao: 2500, boleto: 10000, deposito: 6000 };
 
 const hoje = () => new Date().toISOString().split('T')[0];
 
@@ -74,7 +77,7 @@ function StepPagamento({ quarto, datas, onPagar, processando }) {
     if (tipo === 'cartao') {
       if (!cartao.numero || !cartao.validade || !cartao.cvv || !cartao.banco || !cartao.nome)
         return setErro('Preencha todos os dados do cartão.');
-      // A aprovação/recusa é decidida pelo "gateway" no backend — aqui só exigimos os campos.
+      // Pagamento é simulado (sempre aprovado); só exigimos que todos os campos estejam preenchidos.
     }
     if (tipo === 'deposito') {
       if (!deposito.banco || !deposito.agencia || !deposito.conta)
@@ -152,61 +155,20 @@ function StepPagamento({ quarto, datas, onPagar, processando }) {
   );
 }
 
-// Step 3 — confirmando (polling do status real da reserva, atualizado via RabbitMQ)
-function StepConfirmando({ reservaId, metodo, onConfirmado, onRecusado }) {
-  const tentativas = useRef(0);
-
-  useEffect(() => {
-    const id = setInterval(async () => {
-      tentativas.current += 1;
-      try {
-        const reserva = await buscarReserva(reservaId);
-        if (reserva.reserva_status === 2) { // Confirmada
-          clearInterval(id);
-          onConfirmado(reserva);
-          return;
-        }
-        if (reserva.reserva_status === 3) { // Cancelada (pagamento recusado)
-          clearInterval(id);
-          onRecusado(reserva);
-          return;
-        }
-      } catch (_) {}
-      if (tentativas.current >= 20) { // ~40s sem definição
-        clearInterval(id);
-        onRecusado({ reserva_id: reservaId, timeout: true });
-      }
-    }, 2000);
-    return () => clearInterval(id);
-  }, [reservaId]);
-
+// Step 3 — confirmando (apenas visual: simula o processamento do pagamento).
+// A confirmação real é feita direto pelo handlePagamento (pagamento aprovado na simulação).
+function StepConfirmando({ metodo }) {
   return (
     <div className={styles.stepBody} style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
       <div className={styles.spinnerGrande} />
       <h3 className={styles.stepTitle} style={{ marginTop: '1.5rem' }}>Processando pagamento...</h3>
       <p className={styles.stepSub}>
         {metodo === 'boleto'
-          ? 'Aguardando a compensação do boleto. Isso pode levar alguns segundos.'
-          : 'Confirmando o pagamento com a operadora. Isso pode levar alguns segundos.'}
+          ? 'Registrando a compensação do boleto…'
+          : metodo === 'deposito'
+          ? 'Confirmando o depósito…'
+          : 'Confirmando o pagamento com a operadora…'}
       </p>
-    </div>
-  );
-}
-
-// Step recusado — pagamento não aprovado ou ainda em processamento
-function StepRecusado({ motivo, timeout, onFechar }) {
-  return (
-    <div className={styles.stepBody} style={{ textAlign: 'center' }}>
-      <div className={styles.xIcon}>{timeout ? '⏳' : '✕'}</div>
-      <h3 className={styles.stepTitle}>{timeout ? 'Ainda processando' : 'Pagamento recusado'}</h3>
-      <p className={styles.stepSub}>
-        {timeout
-          ? 'O pagamento ainda está sendo processado. Acompanhe o status em "Minhas reservas".'
-          : (motivo || 'Seu pagamento não foi aprovado. Tente outro método ou revise os dados.')}
-      </p>
-      <button className={styles.btnAvancar} onClick={onFechar} style={{ marginTop: '1.5rem' }}>
-        Fechar
-      </button>
     </div>
   );
 }
@@ -248,10 +210,8 @@ export default function ReservaModal({ quarto, datasIniciais, onClose, onReserva
 
   const [step, setStep] = useState(temDatasIniciais ? 'pagamento' : 'datas');
   const [datas, setDatas] = useState(temDatasIniciais ? calcDatas(datasIniciais.checkin, datasIniciais.checkout) : null);
-  const [reservaId, setReservaId] = useState(null);
   const [reservaFinal, setReservaFinal] = useState(null);
   const [metodo, setMetodo] = useState('cartao');
-  const [recusa, setRecusa] = useState({ motivo: '', timeout: false });
   const [processando, setProcessando] = useState(false);
   const [erroGeral, setErroGeral] = useState('');
 
@@ -266,22 +226,23 @@ export default function ReservaModal({ quarto, datasIniciais, onClose, onReserva
     setProcessando(true);
     setErroGeral('');
     setMetodo(tipo);
+    setStep('confirmando'); // mostra a tela de processamento (simulação do gateway)
     try {
-      // 1. Cria a reserva (status 1 = Pendente — só confirma quando o pagamento for aprovado)
+      // Pagamento aprovado na simulação (um gateway real trataria isso).
+      // 1. Cria a reserva já CONFIRMADA e PAGA
       const reservaPayload = {
         reserva_checkin: new Date(datas.checkin).toISOString(),
         reserva_checkout: new Date(datas.checkout).toISOString(),
-        reserva_status: 1,
+        reserva_status: 2,   // Confirmada
         tipo_quarto_id: quarto.tipoQuarto?.id,
         quarto_id: quarto.id,
-        pagamento_status: 0,
+        pagamento_status: 1, // Pago
         ...(user?.clienteId ? { cliente_id: user.clienteId } : {}),
       };
       const reserva = await criarReserva(reservaPayload);
       const rId = reserva.reserva_id ?? reserva.id;
-      setReservaId(rId);
 
-      // 2. Cria o pagamento (status 1 = pendente de processamento)
+      // 2. Cria o pagamento (aprovado)
       const pagamento = await criarPagamento({
         pagamento_tipo: tipo,
         pagamento_status: 1,
@@ -329,47 +290,30 @@ export default function ReservaModal({ quarto, datasIniciais, onClose, onReserva
         ...instrumentoId,
       });
 
-      // 5. Dispara o "gateway" simulado. A confirmação NÃO é mais imediata:
-      //    o backend processa, decide aprovar/recusar e avisa o MS Reserva via RabbitMQ.
-      const resultado = await processarPagamento({
-        pagamento_id: pagId,
-        reserva_id: rId,
-        metodo: tipo,
-        dados: tipo === 'cartao'
-          ? { numero: cartao.numero, cvv: cartao.cvv, validade: cartao.validade }
-          : {},
-      });
-      // Guarda o motivo (caso recuse) — a tela final usa o status real vindo do polling.
-      setRecusa({ motivo: resultado?.motivo || '', timeout: false });
+      // 5. Simula o tempo de processamento do gateway (cartão 2,5s · boleto 10s · depósito 6s)
+      await new Promise((r) => setTimeout(r, SIMULACAO_MS[tipo] ?? 3000));
 
       if (onReservaCriada) onReservaCriada();
-      setStep('confirmando');
+      setReservaFinal(reserva);
+      setStep('concluido');
     } catch (err) {
-      setErroGeral(err.response?.data?.erro || err.response?.data?.mensagem || err.message || 'Erro ao processar. Tente novamente.');
+      // Só chega aqui se alguma chamada falhar (ex.: faltou informação / erro de rede)
+      setErroGeral(err.response?.data?.erro || err.response?.data?.error || err.response?.data?.mensagem || err.message || 'Erro ao processar. Confira os dados e tente novamente.');
+      setStep('pagamento');
     } finally {
       setProcessando(false);
     }
-  };
-
-  const handleConfirmado = (reserva) => {
-    setReservaFinal(reserva);
-    setStep('concluido');
-  };
-
-  const handleRecusado = (reserva) => {
-    setRecusa((r) => ({ motivo: r.motivo, timeout: Boolean(reserva?.timeout) }));
-    setStep('recusado');
   };
 
   const STEPS = ['datas', 'pagamento', 'confirmando', 'concluido'];
   const stepIdx = STEPS.indexOf(step);
 
   return (
-    <div className={styles.backdrop} onClick={(step === 'concluido' || step === 'recusado') ? onClose : undefined}>
+    <div className={styles.backdrop} onClick={step === 'concluido' ? onClose : undefined}>
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <button className={styles.btnFechar} onClick={onClose}>✕</button>
 
-        {step !== 'concluido' && step !== 'recusado' && (
+        {step !== 'concluido' && (
           <div className={styles.progressBar}>
             {['Datas', 'Pagamento', 'Confirmando'].map((label, i) => (
               <div key={i} className={`${styles.progressStep} ${i <= stepIdx ? styles.progressStepActive : ''}`}>
@@ -390,9 +334,8 @@ export default function ReservaModal({ quarto, datasIniciais, onClose, onReserva
 
         {step === 'datas' && <StepDatas quarto={quarto} onConfirmar={handleDatas} />}
         {step === 'pagamento' && <StepPagamento quarto={quarto} datas={datas} onPagar={handlePagamento} processando={processando} />}
-        {step === 'confirmando' && <StepConfirmando reservaId={reservaId} metodo={metodo} onConfirmado={handleConfirmado} onRecusado={handleRecusado} />}
+        {step === 'confirmando' && <StepConfirmando metodo={metodo} />}
         {step === 'concluido' && <StepConcluido reserva={reservaFinal} quarto={quarto} datas={datas} onFechar={onClose} />}
-        {step === 'recusado' && <StepRecusado motivo={recusa.motivo} timeout={recusa.timeout} onFechar={onClose} />}
       </div>
     </div>
   );
