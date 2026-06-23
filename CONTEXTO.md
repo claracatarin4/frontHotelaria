@@ -5,15 +5,14 @@
 - **URL pública:** http://academico3.rj.senac.br/20261prj5/hotel/
 - **Projeto escolar SENAC-RJ — 2026/1**
 
-> **Última atualização:** 2026-06-22. Sessão recente inverteu o fluxo de reserva
-> (escolher datas → ver quartos livres), adicionou validação de overbooking no MS Reserva,
-> transformou o pagamento em assíncrono (gateway simulado via RabbitMQ), criou o dashboard
-> admin de reservas, **repovoou o banco com 48 quartos + fotos** (scripts de seed/reset),
-> adicionou **máscara/validação de CPF e telefone** (front + MS Cliente), parou de armazenar
-> o cartão real no MS Pagamento (**máscara + hash, CVV descartado**) e implementou
-> **autenticação JWT + autorização por role nos 4 microsserviços** (controle de acesso real).
-> Detalhes na seção **"Sessão 2026-06-22"** ao final. O 502 no login do MS Cliente segue
-> pendente (ver seção "Sessão 2026-06-18").
+> **Última atualização:** 2026-06-23. O projeto está **basicamente pronto** (deployado e testado
+> na faculdade); falta só ajustar detalhes. Histórico resumido:
+> fluxo de reserva por data (escolher datas → ver quartos livres) + overbooking no MS Reserva ·
+> dashboard admin de reservas (com **cancelamento pelo admin**) · banco repovoado com **48 quartos + fotos** ·
+> máscara/validação de CPF e telefone (front + MS Cliente) · cartão mascarado+hash (CVV descartado) ·
+> **autenticação JWT + autorização por role nos 4 microsserviços** · páginas Contato e Serviços ·
+> **pagamento simulado sempre aprovado** (ver "Sessão 2026-06-23" — substitui o gateway assíncrono de 22/06).
+> O 502 do login do MS Cliente apareceu intermitente e parece resolvido (ver "Sessão 2026-06-18").
 
 ---
 
@@ -120,6 +119,8 @@ src/
     Home/             ← listagem de quartos com filtros, modal e ReservaModal (rota /home, privada)
     Configuracoes/    ← perfil/conta/preferências do cliente (rota /configuracoes, privada)
     MinhasReservas/   ← histórico de reservas do cliente (rota /reservas, privada)
+    Contato/          ← página de contato (rota /contato)
+    Servicos/         ← página de serviços (rota /servicos)
   features/
     quarto/
       pages/
@@ -137,7 +138,7 @@ src/
     api.js           ← 4 instâncias Axios com interceptor JWT automático
     reservaService.js
     clienteService.js   ← listarClientes/buscarCliente (MS Cliente)
-    pagamentoService.js ← token próprio via VITE_PAGAMENTO_TOKEN (JWT separado); processarPagamento
+    pagamentoService.js ← criar pagamento/cartão/boleto/depósito/tipo-pagamento (usa o token do login)
   routes/
     AppRoutes.jsx ← PrivateRoute (cliente) + AdminRoute (admin)
   utils/
@@ -164,12 +165,13 @@ src/
   livres no período (cruza `GET /api/quartos` + `GET /reservas` filtrando sobreposição de datas);
   filtro por tipo; skeleton loading; estado vazio/erro
 - Modal de detalhe do quarto com amenidades
-- **ReservaModal**: fluxo em steps (datas → pagamento → confirmando → concluído/recusado)
+- **ReservaModal**: fluxo em steps (datas → pagamento → confirmando → concluído)
   - Datas já vêm da Home (pula a etapa de datas, abre direto no pagamento)
-  - Integrado com MS Reserva (`POST /criar`) e MS Pagamento
   - Suporta cartão, boleto e depósito
-  - **Pagamento assíncrono**: dispara o gateway simulado e faz polling do status real
-    (2=confirmada, 3=recusada com motivo, timeout=ainda processando)
+  - **Pagamento simulado sempre aprovado** (protótipo): cria a reserva já confirmada/paga e mostra
+    a tela "confirmando" só como simulação (cartão 2,5s · boleto 10s · depósito 6s). Erro só se
+    faltar informação ou falha de rede. Ver "Sessão 2026-06-23".
+- Páginas **Contato** (`/contato`) e **Serviços** (`/servicos`)
 - Navbar com dropdown de usuário (avatar, nome, logout, Minhas Reservas, Painel Admin se admin)
 - Rota privada (PrivateRoute) protegendo `/home`, `/reservas`, `/configuracoes`
 - Deploy funcionando no Jenkins/Docker/IIS
@@ -187,6 +189,8 @@ src/
 - **Dashboard admin de reservas** (`/admin/reservas`) — cruza MS Reserva + Quarto + Cliente:
   quem reservou, quando, qual quarto, status, pagamento; stats (total/confirmadas/ocupados hoje);
   filtro + busca; modal de detalhes com dados do hóspede (nome, idade, gênero, CPF, telefone)
+  - **Cancelar reserva**: no modal o admin cancela (`reserva_status: 3`); como cancelada não conta
+    como ocupação, o quarto volta a ficar disponível nas datas.
 
 ## O que FALTA implementar ❌
 
@@ -244,6 +248,9 @@ src/
   (consulta `prisma.reserva` por reservas ativas [status 1 ou 2] do mesmo quarto que se sobreponham → 409). Ver "Sessão 2026-06-22".
 - `reserva_status`: `1=Pendente, 2=Confirmada, 3=Cancelada, 4=Realocação`
 - Consome `pagamento_queue` (eventos `PAGAMENTO_APROVADO`/`PAGAMENTO_RECUSADO`) → vira reserva para 2 ou 3.
+  ⚠ Esse caminho continua existindo mas o front não depende mais dele (ver "Sessão 2026-06-23").
+- **Encaminha o JWT do usuário** nas chamadas service-to-service (valida cliente no MS Cliente e quarto
+  no MS Quarto repassando o `Authorization`), senão daria 401 com o auth ligado.
 
 ### MS Pagamento (Express, 9534) — gateway `/pagamento`
 - `POST /auth/login` (auth próprio) · `GET|POST /pagamentos`, `GET|PUT|PATCH|DELETE /pagamentos/:id`
@@ -256,8 +263,9 @@ src/
 - `POST /depositos` — `{ deposito_banco, deposito_valor, deposito_agencia, deposito_conta, deposito_status }`
 - `POST /tipo-pagamento` — `{ pagamento_id, reserva_id, tipo_pagamento_status, cartao_id? | boleto_id? | deposito_id? }`
   ⚠ `reserva_id` é **obrigatório** — campo NOT NULL no banco, adicionado ao schema em 2026-06-18
-- `POST /pagamentos/processar` — `{ pagamento_id, reserva_id, metodo, dados? }` → 202 `{ aprovado, motivo, estimativa_ms }`
-  (gateway simulado; após o timer publica PAGAMENTO_APROVADO/RECUSADO na fila `pagamento_queue`). Ver "Sessão 2026-06-22".
+- `POST /pagamentos/processar` — gateway assíncrono (202 + RabbitMQ). ⚠ Existe no backend mas **o front
+  NÃO usa mais** desde 2026-06-23 (causava boleto preso em pendente). A confirmação agora é feita direto
+  pelo front. Ver "Sessão 2026-06-23".
 - Auth: o middleware `auth` foi **religado** (valida Bearer JWT com `JWT_SECRET=segredo`). O front envia
   o token do usuário logado (não há mais token fixo no pagamentoService).
 
@@ -579,3 +587,47 @@ Após meus commits de auth, a equipe empurrou (tudo já no GitHub, sem conflito)
 ### Estado geral
 - Os 5 repos estão **sincronizados com o GitHub, sem conflito**. Falta só **deploy no Jenkins + `iisreset`**
   e os itens do "CHECKLIST PRA TESTAR NO JENKINS" acima (principalmente: conta Admin com `usuario_role='Admin'`).
+
+---
+
+# Sessão 2026-06-23 — Pagamento simplificado (protótipo)
+
+## Contexto / problema
+Deployado e testado na faculdade: **cartão funcionava 100%**, mas o **boleto falhava mais do que passava**
+e a reserva ficava com `pagamento_status` null, nunca atualizado. Causa: a confirmação dependia de um
+`setTimeout` no MS Pagamento (cartão 5s, boleto 12s) que, ao fim, publicava no RabbitMQ para o MS Reserva
+confirmar. Com o boleto (janela maior), o evento "fire-and-forget" às vezes se perdia (ex.: processo do
+MS Pagamento reciclando) → reserva presa em pendente.
+
+> Bug secundário encontrado: em `reserva.controller.js > criar`, `pagamento_status: pagamento_status ? ... : null`
+> trata `0` como falsy → toda reserva nascia com `pagamento_status = null` (não 0). Era o "null" observado.
+
+## Decisão
+Como é **protótipo acadêmico** (um gateway de pagamento real trataria isso de forma síncrona/confiável),
+o pagamento passou a ser **sempre aprovado** e a tela "Processando pagamento..." é **apenas simulação visual**.
+
+## O que mudou (FRONT-ONLY — `ReservaModal.jsx`, commit `624e59e`)
+- `handlePagamento` cria a reserva **já confirmada e paga** (`reserva_status: 2`, `pagamento_status: 1`),
+  cria pagamento + instrumento + tipo_pagamento, e mostra a tela "confirmando" por um tempo simulado.
+- **Tempos por método:** `SIMULACAO_MS = { cartao: 2500, boleto: 10000, deposito: 6000 }`.
+- **Erro só se faltar informação** (validação de campos no `StepPagamento`: cartão exige
+  número/validade/cvv/banco/nome; depósito exige banco/agência/conta; boleto é automático) ou falha de rede.
+- Removida a dependência de `processarPagamento`/polling/RabbitMQ no caminho de confirmação;
+  `StepConfirmando` virou só visual; `StepRecusado` e estados não usados foram removidos.
+- O backend (`/pagamentos/processar`, consumer, producer) **continua existindo**, só não é mais usado
+  pelo front — então **não precisa redeploy dos MS** por causa desta mudança (é só rebuild do front).
+
+> ⚠️ **O RabbitMQ NÃO foi removido nem desligado.** Ele continua ativo no resto do sistema:
+> MS Reserva publica `RESERVA_CRIADA/ATUALIZADA/REMOVIDA` a cada reserva, MS Quarto publica
+> `QUARTO_*` e consome eventos de reserva, MS Cliente publica eventos de cliente, e a própria
+> cadeia de pagamento segue no código. O que mudou foi só: **o front não espera mais o evento
+> do RabbitMQ para confirmar o pagamento** (confirma direto). A causa do boleto preso não era
+> timeout de fila — era o `setTimeout` no MS Pagamento se perdendo antes de publicar.
+
+## Cancelamento de reserva pelo admin (confirmado — já existia)
+No `ReservasAdmin.jsx`, o modal de detalhes da reserva tem botão de cancelar (com confirmação) →
+`atualizarReserva(id, { reserva_status: 3 })` → atualiza a tabela. Reserva cancelada (3) não conta como
+ocupação, então o quarto volta a ficar disponível nas datas.
+
+## Deploy desta mudança
+- **Só o front** precisa rebuild no Jenkins + `iisreset`. Nenhum microsserviço muda.
