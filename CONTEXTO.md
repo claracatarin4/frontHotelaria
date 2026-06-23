@@ -11,7 +11,8 @@
 > dashboard admin de reservas (com **cancelamento pelo admin**) · banco repovoado com **48 quartos + fotos** ·
 > máscara/validação de CPF e telefone (front + MS Cliente) · cartão mascarado+hash (CVV descartado) ·
 > **autenticação JWT + autorização por role nos 4 microsserviços** · páginas Contato e Serviços ·
-> **pagamento simulado sempre aprovado** (ver "Sessão 2026-06-23" — substitui o gateway assíncrono de 22/06).
+> **pagamento simulado sempre aprovado** (ver "Sessão 2026-06-23" — substitui o gateway assíncrono de 22/06) ·
+> admin de quartos com **ocupação por reserva (hoje)** e **botão de manutenção**.
 > O 502 do login do MS Cliente apareceu intermitente e parece resolvido (ver "Sessão 2026-06-18").
 
 ---
@@ -178,8 +179,10 @@ src/
 - **Papéis de usuário (Cliente/Admin)** — JWT carrega `role`, redirect pós-login por papel
 - **Painel admin de quartos** — listar / criar / editar / excluir
   - Thumbnail da primeira foto na tabela
-  - Stats: total, disponíveis, ocupados, em manutenção
-  - Nav com links Quartos / Tipos de quarto
+  - Stats e coluna Status por **status efetivo**: manutenção > ocupado (manual OU por reserva ativa hoje) > disponível
+    (o "Ocupados hoje" cruza com `GET /reservas`, igual ao dashboard de reservas)
+  - **Botão Manutenção/Reativar** por quarto (PATCH status 3/1); em manutenção some da Home (que filtra status 1)
+  - Nav com links Quartos / Tipos de quarto / Reservas
 - **Upload de foto de quarto** — compressão canvas (JPEG 70%, max 800px) → base64 → `POST /api/quartos/:id/fotos`
   - Grid de fotos existentes com exclusão inline (no modo editar carrega junto com o quarto)
   - No modo criar: seção de fotos aparece após o quarto ser salvo
@@ -631,3 +634,15 @@ ocupação, então o quarto volta a ficar disponível nas datas.
 
 ## Deploy desta mudança
 - **Só o front** precisa rebuild no Jenkins + `iisreset`. Nenhum microsserviço muda.
+
+## Admin de quartos: ocupação por reserva + manutenção (`Quartos.jsx`, commit `470604b`)
+Problema: a tela "Gerenciar Quartos" mostrava "Ocupados: 0" mesmo com reserva ativa hoje, porque
+olhava só o `status` manual do quarto (1/2/3) — a ocupação real é por data (reservas), que só a
+tela de Reservas calculava.
+- Agora `Quartos.jsx` também busca `GET /reservas` e usa **status efetivo**:
+  `manutencao (status 3) > ocupado (status 2 OU reserva ativa [1/2] cobrindo hoje) > disponivel`.
+  Stats e a coluna Status passam a refletir isso ("Ocupados hoje").
+- **Botão Manutenção/Reativar** por quarto → `editarParcialQuarto(id, { status })` (PATCH 3/1).
+  Em manutenção (3), o quarto **some da Home** (que filtra `status === 1`) e aparece como "Manutenção".
+- ⚠ Pôr em manutenção muda só o status manual; **não cancela reservas futuras** já existentes do quarto
+  (regra extra, se quiserem no futuro). Front-only.
